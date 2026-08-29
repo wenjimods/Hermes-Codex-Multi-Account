@@ -1,0 +1,31 @@
+[project]
+name = "hermes-codex-multi-account"
+version = "1.0.0"
+description = "Community multi-account selector and quota status plugin for Hermes Agent"
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+authors = [
+    {name = "Hermes Community"}
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Utilities",
+]
+
+[project.urls]
+Homepage = "https://github.com/wenjimods/Hermes-Codex-Multi-Account"
+Repository = "https://github.com/wenjimods/Hermes-Codex-Multi-Account"
+Issues = "https://github.com/wenjimods/Hermes-Codex-Multi-Account/issues"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"

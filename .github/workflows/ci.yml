@@ -1,0 +1,33 @@
+name: ci
+on: [push, pull_request]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pytest hermes-agent
+      - name: Scan repository for leaked secrets and private paths
+        run: python scripts/scan_public.py
+      - name: Run pytest suite
+        run: python -m pytest
+      - name: Syntax check desktop plugin JS
+        run: node --check src/desktop/codex-quota-status/plugin.js
+      - name: Dry-run transactional installer
+        run: python scripts/install.py --dry-run

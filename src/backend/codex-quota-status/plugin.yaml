@@ -1,0 +1,9 @@
+name: codex-quota-status
+version: 1.0.0
+description: "Codex multi-account default selector with per-account quota display."
+author: hermes-community
+kind: standalone
+platforms:
+  - windows
+  - linux
+  - macos
