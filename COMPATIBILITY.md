@@ -4,17 +4,19 @@ This document records the exact verified baseline and upstream integration point
 
 ## Verified Test Baseline
 
-The current implementation has been tested and verified against the following environment:
+Local verification was performed against the following working tree and environment; configured CI targets are listed separately:
 
 | Property | Verified Value |
 | :--- | :--- |
 | **Hermes Agent Version** | `v0.20.5 (2026.8.19)` |
 | **Upstream Git Commit** | `7eee066c` |
-| **Local Working State** | `4a19dfa7 (+2 carried commits)` |
+| **Verified Local Working Tree** | `4a19dfa7 (+2 carried commits)` |
 | **Python Version** | `Python 3.11.15` |
 | **Locally verified OS** | `Windows 11` |
 | **Configured CI targets** | `Windows`, `Ubuntu Linux`, `macOS` (remote run required) |
 | **Node.js Environment** | `Node.js 22.x` |
+
+The verified local working tree was based on upstream commit `7eee066c` and included two carried local commits at `4a19dfa7`; it was not a pristine upstream checkout.
 
 ## Internal API Dependencies & Risks
 

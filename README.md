@@ -11,7 +11,7 @@ An unofficial plugin for **Hermes Agent** and **Hermes Desktop** that adds defau
 
 ## Verified Baseline & Compatibility
 
-- **Hermes Agent Baseline**: `v0.20.5 (2026.8.19)`, upstream `7eee066c`, local `4a19dfa7 (+2 carried commits)`
+- **Hermes Agent Baseline**: `v0.20.5 (2026.8.19)`, local working tree `4a19dfa7` based on upstream `7eee066c` with 2 carried commits (not a pristine upstream checkout)
 - **Locally verified**: Windows 11, Python 3.11.15, Node.js 22
 - **CI targets**: Windows, Ubuntu Linux, and macOS on Python 3.11 / Node.js 22
 
@@ -24,7 +24,7 @@ For technical details on integration and upstream API dependency analysis, refer
 To preserve stability and compatibility across all platforms:
 - **Default Account Only**: Selecting an account reorganizes priority in `auth.json` so that **newly initiated conversations** use the chosen default account.
 - **No Per-Session Binding**: This plugin does **not** permanently lock or bind existing sessions to specific account IDs and does **not** rely on ephemeral `session.credential.select` APIs.
-- **Strict Privacy**: Access tokens, refresh tokens, and credentials are never transmitted to the Desktop UI or logged. The backend parses only public JWT claims (such as email labels and plan tier) and communicates using opaque credential IDs.
+- **Strict Privacy**: Raw access and refresh tokens are never transmitted to the local Desktop UI or logged. The backend locally decodes only the JWT claims needed for display (email label and plan tier), then sends that metadata together with opaque credential IDs and quota/status data to the local Desktop UI.
 
 ---
 

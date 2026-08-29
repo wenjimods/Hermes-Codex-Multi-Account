@@ -21,7 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Hermetic preflight checks for `hermes` CLI and environment sanity.
   - Timestamped backup directory creation before file copy.
   - Automatic atomic rollback upon failure during installation, plugin enablement, or doctor diagnostics.
-  - Uninstallation and backup restoration flags (`--uninstall`, `--restore <backup_path>`).
+  - Manual uninstallation and backup restoration procedures documented in the README; the installer does not provide `--uninstall` or `--restore` flags.
 - **Comprehensive Verifier (`scripts/verify.py`)**:
   - Distinguishes between `missing`, `malformed`, and `valid` `auth.json` configurations.
   - Configurable minimum accounts threshold (default `--min-accounts 2`).
@@ -29,4 +29,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Public Privacy & Leak Gatekeeper (`scripts/scan_public.py`)**:
   - Enforces repository-level hygiene against accidental check-in of personal paths, real emails, or live token strings.
 - **Multi-Platform CI Matrix**:
-  - Automated testing on Ubuntu Linux, Windows, and macOS for Python 3.10/3.11/3.12 and Node.js 20/22.
+  - Automated testing on Ubuntu Linux, Windows, and macOS with Python 3.11 and Node.js 22.
