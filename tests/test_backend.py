@@ -266,6 +266,35 @@ def test_verifier_min_accounts_and_malformed(tmp_path):
     assert rep["codex_account_count"] == 2
 
 
+def test_verifier_passes_target_home_to_doctor(tmp_path, monkeypatch):
+    hermes_home = tmp_path / "isolated-home"
+    backend_dir = hermes_home / "plugins" / "codex-quota-status"
+    desktop_dir = hermes_home / "desktop-plugins" / "codex-quota-status"
+    backend_dir.mkdir(parents=True)
+    desktop_dir.mkdir(parents=True)
+    (backend_dir / "__init__.py").write_text("# backend", encoding="utf-8")
+    (desktop_dir / "plugin.js").write_text("// desktop", encoding="utf-8")
+
+    calls = []
+
+    def record_subprocess(argv, **kwargs):
+        calls.append((argv, kwargs))
+        return types.SimpleNamespace(returncode=0)
+
+    monkeypatch.setattr(verifier.shutil, "which", lambda _: "C:/fake/hermes")
+    monkeypatch.setattr(verifier.subprocess, "run", record_subprocess)
+
+    code, _ = verifier.verify_installation(
+        hermes_home,
+        min_accounts=0,
+        skip_doctor=False,
+    )
+
+    assert code == 0
+    assert calls[0][0] == ["hermes", "plugins", "doctor", "codex-quota-status"]
+    assert calls[0][1]["env"]["HERMES_HOME"] == str(hermes_home.resolve())
+
+
 # 9. Installer failure triggers rollback of old directory or removes new installation
 def test_installer_rollback_on_failure(tmp_path, monkeypatch):
     hermes_home = tmp_path / "hermes_home"

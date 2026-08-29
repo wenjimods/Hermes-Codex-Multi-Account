@@ -102,7 +102,11 @@ def verify_installation(
 
     # Run hermes doctor if requested
     if not skip_doctor and shutil.which("hermes"):
-        doctor_res = subprocess.run(["hermes", "plugins", "doctor", PLUGIN], check=False)
+        doctor_res = subprocess.run(
+            ["hermes", "plugins", "doctor", PLUGIN],
+            check=False,
+            env={**os.environ, "HERMES_HOME": str(home)},
+        )
         report["doctor_exit_code"] = doctor_res.returncode
         if doctor_res.returncode != 0:
             report["error"] = f"hermes plugins doctor failed with exit code {doctor_res.returncode}"
