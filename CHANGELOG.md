@@ -5,6 +5,14 @@ All notable changes to `hermes-codex-multi-account` will be documented in this f
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.1] - 2026-08-31
+
+### Fixed
+- Render Free-plan primary quota windows as monthly instead of incorrectly labeling them as 5-hour sessions.
+- Keep Pro on its weekly-only display while preserving 5-hour and weekly windows for Plus and Business plans.
+- Replace ambiguous missing-quota copy such as “Unavailable” / “暂不可用” with neutral “No quota data” / “暂无额度信息” messaging.
+- Include the date in monthly reset timestamps.
+
 ## [1.0.0] - 2026-08-19
 
 ### Added

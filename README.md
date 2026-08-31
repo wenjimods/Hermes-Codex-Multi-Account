@@ -37,7 +37,7 @@ This extension interfaces with internal, non-public Hermes Agent modules (`agent
 ## Features
 
 - **Transactional Installation**: Auto-discovers Hermes directories, validates preflight requirements, creates timestamped backups, and automatically rolls back changes if installation or verification fails.
-- **Status Bar & Dropdown Menu**: View remaining 5-hour / weekly quota percentages and reset countdowns directly in Hermes Desktop.
+- **Status Bar & Dropdown Menu**: View plan-aware quota periods directly in Hermes Desktop: 5-hour / weekly for standard paid plans, weekly for Pro, and monthly for Free.
 - **One-Click Default Switching**: Switch active priority to another healthy Codex account.
 - **Bilingual Interface**: Native English and Chinese (`zh-CN`) support using Hermes Desktop i18n APIs with responsive fallbacks.
 - **Cooldown & Exhaustion Awareness**: Transparently marks cooling-down or dead accounts as unselectable until quotas reset.

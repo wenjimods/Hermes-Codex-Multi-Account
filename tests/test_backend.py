@@ -68,7 +68,57 @@ def make_entry(**overrides):
 def test_plan_normalization():
     assert plugin.normalize_plan("prolite") == "Pro"
     assert plugin.normalize_plan("business") == "Business"
+    assert plugin.normalize_plan("free") == "Free"
     assert plugin.normalize_plan("unknown_plan") == "Unknown Plan"
+
+
+def make_usage_snapshot(plan, *, primary=25, secondary=50):
+    windows = []
+    if primary is not None:
+        windows.append(types.SimpleNamespace(
+            label="Session",
+            used_percent=primary,
+            reset_at=datetime(2026, 9, 30, 14, 0).astimezone(),
+        ))
+    if secondary is not None:
+        windows.append(types.SimpleNamespace(
+            label="Weekly",
+            used_percent=secondary,
+            reset_at=datetime(2026, 9, 7, 6, 0, tzinfo=timezone.utc),
+        ))
+    return types.SimpleNamespace(plan=plan, windows=tuple(windows))
+
+
+def test_free_primary_window_is_monthly_not_session():
+    plan, quotas = plugin.normalize_usage_windows(
+        "Free",
+        make_usage_snapshot("free", primary=0, secondary=None),
+    )
+    assert plan == "Free"
+    assert quotas["session"]["remaining"] is None
+    assert quotas["weekly"]["remaining"] is None
+    assert quotas["monthly"]["remaining"] == 100
+    assert quotas["monthly"]["reset"] == "09/30 14:00"
+
+
+def test_paid_and_pro_window_mappings_are_preserved():
+    plus_plan, plus = plugin.normalize_usage_windows(
+        "Plus",
+        make_usage_snapshot("plus", primary=25, secondary=50),
+    )
+    assert plus_plan == "Plus"
+    assert plus["session"]["remaining"] == 75
+    assert plus["weekly"]["remaining"] == 50
+    assert plus["monthly"]["remaining"] is None
+
+    pro_plan, pro = plugin.normalize_usage_windows(
+        "Pro",
+        make_usage_snapshot("prolite", primary=2, secondary=None),
+    )
+    assert pro_plan == "Pro"
+    assert pro["session"]["remaining"] is None
+    assert pro["weekly"]["remaining"] == 98
+    assert pro["monthly"]["remaining"] is None
 
 
 # 2. Account row does not contain raw tokens

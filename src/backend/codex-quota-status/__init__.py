@@ -28,10 +28,10 @@ def normalize_plan(value: Any) -> str:
     return PLAN_NAMES.get(raw.lower(), raw.replace("_", " ").replace("-", " ").title())
 
 
-def _format_reset(value: datetime | None, *, weekly: bool = False) -> str | None:
+def _format_reset(value: datetime | None, *, long_term: bool = False) -> str | None:
     if value is None:
         return None
-    return value.astimezone().strftime("%m/%d %H:%M" if weekly else "%H:%M")
+    return value.astimezone().strftime("%m/%d %H:%M" if long_term else "%H:%M")
 
 
 def _claims(entry: Any) -> dict[str, Any]:
@@ -95,6 +95,7 @@ def account_row(entry: Any, current_id: str | None) -> dict[str, Any]:
         "selectable": not dead and cooldown is None,
         "session": {"remaining": None, "reset": None},
         "weekly": {"remaining": None, "reset": None},
+        "monthly": {"remaining": None, "reset": None},
     }
 
 
@@ -131,6 +132,41 @@ def set_priority(provider: str, opaque_id: str) -> tuple[bool, str]:
     return True, "ok"
 
 
+def normalize_usage_windows(
+    fallback_plan: str,
+    snapshot: Any,
+) -> tuple[str, dict[str, dict[str, int | str | None]]]:
+    """Map generic Codex API windows onto plan-specific display periods."""
+    windows = {window.label.lower(): window for window in snapshot.windows}
+    plan = normalize_plan(snapshot.plan or fallback_plan)
+    session = windows.get("session")
+    weekly = windows.get("weekly")
+    monthly = windows.get("monthly")
+
+    # The shared Hermes parser labels the API primary window "session" even
+    # when its actual period is plan-specific. Pro's sole primary window is
+    # weekly; Free's sole primary window is monthly.
+    if plan == "Pro" and weekly is None:
+        weekly, session = session, None
+    elif plan == "Free":
+        monthly, session, weekly = monthly or session, None, None
+
+    def quota(window: Any, *, long_term: bool = False) -> dict[str, int | str | None]:
+        used = getattr(window, "used_percent", None) if window is not None else None
+        remaining = None if used is None else max(0, min(100, round(100 - float(used))))
+        reset_at = getattr(window, "reset_at", None) if window is not None else None
+        return {
+            "remaining": remaining,
+            "reset": _format_reset(reset_at, long_term=long_term),
+        }
+
+    return plan, {
+        "session": quota(session),
+        "weekly": quota(weekly, long_term=True),
+        "monthly": quota(monthly, long_term=True),
+    }
+
+
 def build_snapshot() -> dict[str, Any]:
     from agent.credential_pool import load_pool
 
@@ -147,6 +183,7 @@ def build_snapshot() -> dict[str, Any]:
         "plan": "Unknown",
         "session": {"remaining": None, "reset": None},
         "weekly": {"remaining": None, "reset": None},
+        "monthly": {"remaining": None, "reset": None},
     }
     if selected is None:
         payload["reason"] = "no_available_credential"
@@ -167,30 +204,8 @@ def build_snapshot() -> dict[str, Any]:
             return str(entry.id), None, type(exc).__name__
 
     def apply_usage(row: dict[str, Any], snapshot: Any) -> None:
-        windows = {window.label.lower(): window for window in snapshot.windows}
-        session = windows.get("session")
-        weekly = windows.get("weekly")
-
-        def remaining(window: Any) -> int | None:
-            if window is None or window.used_percent is None:
-                return None
-            return max(0, min(100, round(100 - float(window.used_percent))))
-
-        row["plan"] = normalize_plan(snapshot.plan or row["plan"])
-        # The Codex API reports Pro (internal slug: prolite) as a single
-        # 604800-second primary window and no secondary window. The shared
-        # account_usage parser calls every primary window "session", so remap
-        # that one verified Pro shape to weekly instead of mislabeling it 5h.
-        if row["plan"] == "Pro" and weekly is None:
-            weekly, session = session, None
-        row["session"] = {
-            "remaining": remaining(session),
-            "reset": _format_reset(session.reset_at if session else None),
-        }
-        row["weekly"] = {
-            "remaining": remaining(weekly),
-            "reset": _format_reset(weekly.reset_at if weekly else None, weekly=True),
-        }
+        row["plan"], quotas = normalize_usage_windows(row["plan"], snapshot)
+        row.update(quotas)
         row["fetched_at"] = snapshot.fetched_at.astimezone().isoformat(timespec="seconds")
 
     row_by_id = {row["id"]: row for row in rows}
@@ -207,6 +222,7 @@ def build_snapshot() -> dict[str, Any]:
         payload["plan"] = current_row["plan"]
         payload["session"] = current_row["session"]
         payload["weekly"] = current_row["weekly"]
+        payload["monthly"] = current_row["monthly"]
     return payload
 
 
