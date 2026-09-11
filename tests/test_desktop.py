@@ -36,3 +36,12 @@ def test_long_account_labels_do_not_expand_the_status_bar() -> None:
 
     assert "min-w-0 max-w-full" in source
     assert "min-w-0 truncate whitespace-nowrap font-medium" in source
+
+
+def test_non_fill_first_strategy_and_unknown_account_have_clear_messages() -> None:
+    source = desktop_source()
+
+    assert "strategyWarning" in source
+    assert "priority_guaranteed" in source
+    assert "unknownAccount" in source
+    assert "Account is visible but cannot be reprioritized in the current Hermes profile." in source

@@ -36,6 +36,8 @@ const BUNDLES = {
     statusCooldown: 'Cooldown {m}m',
     statusReauth: 'Re-authorize to sync plan',
     successSwitch: 'Default account set to {email}; takes effect on new chats',
+    strategyWarning: 'Priority updated, but the {strategy} pool strategy does not guarantee this account will be used next.',
+    unknownAccount: 'Account is visible but cannot be reprioritized in the current Hermes profile.',
     failSwitch: 'Codex account operation failed.',
     sessionLabel: '5h',
     weeklyLabel: 'Week',
@@ -51,6 +53,8 @@ const BUNDLES = {
     statusCooldown: '冷却 {m} 分钟',
     statusReauth: '需重新授权以同步套餐',
     successSwitch: '默认账号已设为 {email}；新对话生效',
+    strategyWarning: '优先级已更新，但当前 {strategy} 号池策略不会保证下次使用该账号。',
+    unknownAccount: '当前界面可以看到该账号，但无法在当前 Hermes Profile 中调整其优先级。',
     failSwitch: 'Codex账号操作失败。',
     sessionLabel: '5h',
     weeklyLabel: '周',
@@ -86,7 +90,8 @@ async function runStatus(extraArgs = []) {
   if (result?.blocked || result?.code !== 0) {
     let reason = result?.hint || result?.output || fallbackT('failSwitch')
     try {
-      reason = parseSnapshot(result?.output).reason || reason
+      const reasonCode = parseSnapshot(result?.output).reason
+      reason = reasonCode === 'unknown_account' ? fallbackT('unknownAccount') : (reasonCode || reason)
     } catch {}
     throw new Error(reason)
   }
@@ -247,12 +252,12 @@ function QuotaStrip() {
       }
     })
     try {
-      await runStatus(['--select-id', account.id])
+      const selection = await runStatus(['--select-id', account.id])
       void query.refetch()
-      host.notify({
-        kind: 'success',
-        message: t('successSwitch', { email: account.email })
-      })
+      const priorityGuaranteed = selection?.priority_guaranteed ?? data.priority_guaranteed
+      host.notify(priorityGuaranteed === false
+        ? { kind: 'warning', message: t('strategyWarning', { strategy: selection?.pool_strategy || data.pool_strategy || 'non-fill-first' }) }
+        : { kind: 'success', message: t('successSwitch', { email: account.email }) })
     } catch (error) {
       queryClient.setQueryData([ID], previous)
       host.notify({ kind: 'error', message: error instanceof Error ? error.message : String(error) })

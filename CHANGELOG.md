@@ -5,6 +5,13 @@ All notable changes to `hermes-codex-multi-account` will be documented in this f
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.5] - 2026-09-11
+
+### Changed
+- Read the displayed account with `pool.peek()` so periodic Desktop status refreshes do not advance request counters or rotate account priority; retain `pool.select()` only as a compatibility fallback for older Hermes releases without `peek()`.
+- Report the active Hermes credential-pool strategy and warn after reprioritization when a non-`fill_first` strategy does not guarantee the selected account will be used next.
+- Replace the raw `unknown_account` code with a clear current-Profile reprioritization message in the Desktop UI.
+
 ## [1.0.4] - 2026-09-11
 
 Version `1.0.3` was an unpublished local iteration; its changes are consolidated into this release candidate.

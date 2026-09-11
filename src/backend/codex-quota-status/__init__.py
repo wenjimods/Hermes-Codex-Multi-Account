@@ -320,17 +320,36 @@ def fetch_account_usage(entry: Any) -> dict[str, Any]:
     }
 
 
+def _pool_strategy(pool: Any = None) -> str:
+    """Read the configured routing strategy without selecting a credential."""
+    from agent import credential_pool
+
+    resolver = getattr(credential_pool, "get_pool_strategy", None)
+    if callable(resolver):
+        return str(resolver(PROVIDER) or "fill_first")
+    return str(getattr(pool, "_strategy", None) or "fill_first")
+
+
+def _peek_pool(pool: Any) -> Any:
+    """Use Hermes' non-selecting accessor, falling back for older releases."""
+    peek = getattr(pool, "peek", None)
+    return peek() if callable(peek) else pool.select()
+
+
 def build_snapshot() -> dict[str, Any]:
     from agent.credential_pool import load_pool
 
     pool = load_pool(PROVIDER)
     entries = pool.entries()
-    selected = pool.select()
+    selected = _peek_pool(pool)
+    strategy = _pool_strategy(pool)
     current_id = str(selected.id) if selected is not None else None
     rows = [account_row(entry, current_id) for entry in entries]
     payload: dict[str, Any] = {
         "available": bool(entries),
         "provider": PROVIDER,
+        "pool_strategy": strategy,
+        "priority_guaranteed": strategy == "fill_first",
         "accounts": rows,
         "credential": None,
         "plan": "Unknown",
@@ -393,7 +412,14 @@ def quota_status_command(args: Any = None) -> int:
         # Selection is deliberately a fast path: the UI already has the
         # account metadata and will refresh the full quota snapshot once in
         # the background after this marker is received.
-        _emit({"ok": True, "provider": PROVIDER, "selected_id": selected_id})
+        strategy = _pool_strategy()
+        _emit({
+            "ok": True,
+            "provider": PROVIDER,
+            "selected_id": selected_id,
+            "pool_strategy": strategy,
+            "priority_guaranteed": strategy == "fill_first",
+        })
         return 0
     try:
         payload = build_snapshot()

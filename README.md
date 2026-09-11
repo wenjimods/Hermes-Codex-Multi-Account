@@ -25,7 +25,9 @@ For technical details on integration and upstream API dependency analysis, refer
 
 To preserve stability and compatibility across all platforms:
 - **Hermes-Owned Account Pool**: Account authorization and automatic credential rotation remain Hermes Agent core behavior. This plugin displays that pool and changes its default priority; it does not replace Hermes rotation logic.
+- **Read-Only Status Refresh**: Periodic quota refreshes use Hermes' non-selecting `peek()` accessor when available, so viewing status does not advance or rotate the account pool.
 - **Default Account Only**: Selecting an account reorganizes priority in `auth.json` so that **newly initiated conversations** use the chosen default account.
+- **Strategy-Aware Priority**: Priority reliably controls the next default account under `fill_first`. With `round_robin`, `least_used`, or `random`, the plugin keeps the configured Hermes strategy and shows a warning instead of promising which account will be used next.
 - **No Per-Session Binding**: This plugin does **not** permanently lock or bind existing sessions to specific account IDs and does **not** rely on ephemeral `session.credential.select` APIs.
 - **Strict Privacy**: Raw access and refresh tokens are never transmitted to the local Desktop UI or logged. The backend locally decodes only the JWT claims needed for display (email label and plan tier), then sends that metadata together with opaque credential IDs and quota/status data to the local Desktop UI.
 - **Display-Only Deduplication**: The dropdown may collapse rows that share the same verified email claim and plan. This does not remove, merge, or rewrite any credential in the Hermes account pool.

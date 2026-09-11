@@ -291,9 +291,93 @@ def test_cooldown_supports_older_hermes_helper_signature(monkeypatch):
     assert plugin._cooldown_until(make_entry(last_status="exhausted")) == future
 
 
-# 4. Fast path when select_id is supplied
+# 4. Status snapshots prefer non-selecting pool reads
+def _snapshot_row(entry_id="opaque-a"):
+    return {
+        "id": entry_id,
+        "email": "user@example.com",
+        "email_verified": True,
+        "display": "user@example.com",
+        "plan": "Plus",
+        "status": "ok",
+        "cooldown": None,
+        "current": True,
+        "priority": 0,
+        "selectable": True,
+        "session": {"remaining": None, "reset": None},
+        "weekly": {"remaining": None, "reset": None},
+        "monthly": {"remaining": None, "reset": None},
+    }
+
+
+def _usage_result():
+    return {
+        "plan": "Plus",
+        "session": {"remaining": 80, "reset": "12:00"},
+        "weekly": {"remaining": 60, "reset": "09/18 12:00"},
+        "monthly": {"remaining": None, "reset": None},
+        "fetched_at": "2026-09-11T20:00:00+08:00",
+    }
+
+
+def test_build_snapshot_uses_peek_without_selecting(monkeypatch):
+    entry = make_entry()
+
+    class Pool:
+        def entries(self):
+            return [entry]
+
+        def peek(self):
+            return entry
+
+        def select(self):
+            raise AssertionError("status query must not select from the pool")
+
+    monkeypatch.setattr("agent.credential_pool.load_pool", lambda _: Pool())
+    monkeypatch.setattr("agent.credential_pool.get_pool_strategy", lambda _: "round_robin")
+    monkeypatch.setattr(plugin, "account_row", lambda item, current_id: _snapshot_row(str(item.id)))
+    monkeypatch.setattr(plugin, "_cooldown_until", lambda _: None)
+    monkeypatch.setattr(plugin, "_email", lambda _: "user@example.com")
+    monkeypatch.setattr(plugin, "_entry_plan", lambda _: "Plus")
+    monkeypatch.setattr(plugin, "fetch_account_usage", lambda _: _usage_result())
+
+    payload = plugin.build_snapshot()
+
+    assert payload["credential"]["id"] == "opaque-a"
+    assert payload["pool_strategy"] == "round_robin"
+    assert payload["priority_guaranteed"] is False
+
+
+def test_build_snapshot_falls_back_to_select_for_older_hermes(monkeypatch):
+    entry = make_entry()
+    calls = []
+
+    class LegacyPool:
+        def entries(self):
+            return [entry]
+
+        def select(self):
+            calls.append("select")
+            return entry
+
+    monkeypatch.setattr("agent.credential_pool.load_pool", lambda _: LegacyPool())
+    monkeypatch.setattr("agent.credential_pool.get_pool_strategy", lambda _: "fill_first")
+    monkeypatch.setattr(plugin, "account_row", lambda item, current_id: _snapshot_row(str(item.id)))
+    monkeypatch.setattr(plugin, "_cooldown_until", lambda _: None)
+    monkeypatch.setattr(plugin, "_email", lambda _: "user@example.com")
+    monkeypatch.setattr(plugin, "_entry_plan", lambda _: "Plus")
+    monkeypatch.setattr(plugin, "fetch_account_usage", lambda _: _usage_result())
+
+    payload = plugin.build_snapshot()
+
+    assert calls == ["select"]
+    assert payload["priority_guaranteed"] is True
+
+
+# 5. Fast path when select_id is supplied
 def test_select_fast_path(monkeypatch, capsys):
     monkeypatch.setattr(plugin, "set_priority", lambda provider, account_id: (True, "ok"))
+    monkeypatch.setattr(plugin, "_pool_strategy", lambda pool=None: "least_used")
     monkeypatch.setattr(
         plugin,
         "build_snapshot",
@@ -303,6 +387,27 @@ def test_select_fast_path(monkeypatch, capsys):
     assert plugin.quota_status_command(args) == 0
     payload = json.loads(capsys.readouterr().out.removeprefix(plugin.MARKER))
     assert payload["selected_id"] == "opaque-b"
+    assert payload["pool_strategy"] == "least_used"
+    assert payload["priority_guaranteed"] is False
+
+
+def test_select_unknown_account_preserves_machine_reason(monkeypatch, capsys):
+    monkeypatch.setattr(plugin, "set_priority", lambda provider, account_id: (False, "unknown_account"))
+
+    assert plugin.quota_status_command(types.SimpleNamespace(select_id="borrowed-id")) == 1
+    payload = json.loads(capsys.readouterr().out.removeprefix(plugin.MARKER))
+
+    assert payload["reason"] == "unknown_account"
+    assert "borrowed-id" not in json.dumps(payload)
+
+
+def test_pool_strategy_falls_back_to_pool_metadata(monkeypatch):
+    import agent.credential_pool as credential_pool
+
+    monkeypatch.delattr(credential_pool, "get_pool_strategy", raising=False)
+    pool = types.SimpleNamespace(_strategy="random")
+
+    assert plugin._pool_strategy(pool) == "random"
 
 
 # 5. set_priority changes ONLY priority field, preserves other pool entry properties
