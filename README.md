@@ -124,6 +124,12 @@ We take credential privacy strictly:
 
 ---
 
+## Community
+
+We recognize and support [LINUX DO](https://linux.do/) as a community for open technical discussion and sharing.
+
+---
+
 ## License
 
 This project is licensed under the [MIT License](LICENSE).
