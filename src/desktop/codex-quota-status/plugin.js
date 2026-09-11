@@ -17,6 +17,13 @@ import { jsx, jsxs } from 'react/jsx-runtime'
 const ID = 'codex-quota-status'
 const MARKER = 'HERMES_CODEX_QUOTA_JSON '
 const REFRESH_MS = 60_000
+const MENU_STYLE = {
+  width: 'min(30rem, calc(100vw - 1rem))',
+  maxWidth: 'calc(100vw - 1rem)',
+  maxHeight: 'min(32rem, calc(100vh - 1rem))',
+  overflowX: 'hidden',
+  overflowY: 'auto'
+}
 
 const BUNDLES = {
   en: {
@@ -27,6 +34,7 @@ const BUNDLES = {
     na: 'No quota data',
     statusDead: 'Unavailable',
     statusCooldown: 'Cooldown {m}m',
+    statusReauth: 'Re-authorize to sync plan',
     successSwitch: 'Default account set to {email}; takes effect on new chats',
     failSwitch: 'Codex account operation failed.',
     sessionLabel: '5h',
@@ -41,6 +49,7 @@ const BUNDLES = {
     na: '暂无额度信息',
     statusDead: '不可用',
     statusCooldown: '冷却 {m} 分钟',
+    statusReauth: '需重新授权以同步套餐',
     successSwitch: '默认账号已设为 {email}；新对话生效',
     failSwitch: 'Codex账号操作失败。',
     sessionLabel: '5h',
@@ -106,6 +115,15 @@ function quotaSpecsFor(plan, quotas, t) {
   if (plan === 'Free') {
     return [{ key: 'monthly', label: t('monthlyLabel'), quota: quotas?.monthly, tone: 'text-(--ui-purple)' }]
   }
+  if (plan === 'Go') {
+    const specs = [
+      { key: 'session', label: t('sessionLabel'), quota: quotas?.session, tone: 'text-(--ui-cyan)' },
+      { key: 'weekly', label: t('weeklyLabel'), quota: quotas?.weekly, tone: 'text-(--ui-purple)' },
+      { key: 'monthly', label: t('monthlyLabel'), quota: quotas?.monthly, tone: 'text-(--ui-purple)' }
+    ]
+    const populated = specs.filter(spec => typeof spec.quota?.remaining === 'number' || Boolean(spec.quota?.reset))
+    return populated.length ? populated : specs.slice(0, 2)
+  }
   if (plan === 'Pro') {
     return [{ key: 'weekly', label: t('weeklyLabel'), quota: quotas?.weekly, tone: 'text-(--ui-purple)' }]
   }
@@ -116,6 +134,7 @@ function quotaSpecsFor(plan, quotas, t) {
 }
 
 function accountStatus(account, t) {
+  if (account.reauth_required) return t ? t('statusReauth') : fallbackT('statusReauth')
   if (account.status === 'dead') return t ? t('statusDead') : fallbackT('statusDead')
   if (account.status === 'cooldown') {
     const minutes = Math.max(1, Math.ceil((Number(account.cooldown || 0) - Date.now() / 1000) / 60))
@@ -123,6 +142,22 @@ function accountStatus(account, t) {
     return fallbackT('statusCooldown', { m: minutes })
   }
   return ''
+}
+
+function distinctAccounts(accounts) {
+  const byIdentity = new Map()
+  for (const account of accounts) {
+    const email = String(account?.email || account?.display || '').trim().toLowerCase()
+    const plan = String(account?.plan || '').trim().toLowerCase()
+    const key = account?.email_verified && email && plan
+      ? `${email}\u0000${plan}`
+      : `credential\u0000${String(account?.id || '')}`
+    const existing = byIdentity.get(key)
+    if (!existing || account.current || (!existing.selectable && account.selectable)) {
+      byIdentity.set(key, account)
+    }
+  }
+  return [...byIdentity.values()]
 }
 
 function QuotaStrip() {
@@ -172,6 +207,7 @@ function QuotaStrip() {
   }
 
   const accounts = data.accounts || []
+  const visibleAccounts = distinctAccounts(accounts)
   const current = accounts.find(account => account.current) || null
   const email = current?.email || data.credential?.email || 'Codex'
   const plan = current?.plan || data.plan || ''
@@ -180,7 +216,7 @@ function QuotaStrip() {
     weekly: current?.weekly ?? data.weekly,
     monthly: current?.monthly ?? data.monthly
   }
-  const currentQuotaSpecs = quotaSpecsFor(plan, currentQuotas, t)
+  const currentQuotaSpecs = current?.reauth_required ? [] : quotaSpecsFor(plan, currentQuotas, t)
   const naText = t('na')
   const titleQuotas = currentQuotaSpecs.map(spec => {
     const value = spec.quota?.remaining
@@ -234,13 +270,13 @@ function QuotaStrip() {
           title,
           style: { minHeight: '2rem', lineHeight: '1.25rem' },
           className: cn(
-            'inline-flex max-w-full items-center justify-start gap-1.5 rounded-md px-3 text-[0.6875rem]',
+            'inline-flex min-w-0 max-w-full items-center justify-start gap-1.5 overflow-hidden rounded-md px-3 text-[0.6875rem]',
             'border border-(--ui-stroke-secondary) text-(--ui-text-tertiary)',
             'hover:bg-(--chrome-action-hover) hover:text-foreground'
           ),
           children: [
             jsx('span', { className: 'text-(--ui-accent)', children: '●' }),
-            jsx('span', { className: 'shrink-0 whitespace-nowrap font-medium text-foreground', children: email }),
+            jsx('span', { className: 'min-w-0 truncate whitespace-nowrap font-medium text-foreground', children: email }),
             plan ? jsx('span', { className: 'shrink-0 text-(--ui-text-secondary)', children: `· ${plan}` }) : null,
             jsx('span', { className: 'text-(--ui-text-quaternary)', children: '｜' }),
             ...currentQuotaSpecs.flatMap((spec, index) => [
@@ -253,27 +289,32 @@ function QuotaStrip() {
       }),
       jsx(DropdownMenuContent, {
         align: 'start',
+        sideOffset: 4,
+        collisionPadding: 8,
+        style: MENU_STYLE,
+        className: 'min-w-0',
         children: [
           jsx('div', { className: 'px-2 py-1.5 text-xs font-medium text-(--ui-text-secondary)', children: t('selectHeader') }),
           jsx(DropdownMenuSeparator, {}),
-          ...accounts.map(account => {
+          ...visibleAccounts.map(account => {
             const status = accountStatus(account, t)
-            const quotaSpecs = quotaSpecsFor(account.plan, account, t)
+            const quotaSpecs = account.reauth_required ? [] : quotaSpecsFor(account.plan, account, t)
             return jsx(
               DropdownMenuItem,
               {
                 disabled: !account.selectable || account.current || Boolean(choosing),
                 onSelect: () => void selectAccount(account),
+                className: 'w-full min-w-0',
                 children: jsxs('span', {
                   className: 'grid w-full min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] gap-x-2 gap-y-1 py-2',
                   children: [
                     jsx('span', { className: 'w-3 shrink-0', children: account.current ? '✓' : '' }),
                     jsxs('span', { className: 'min-w-0 truncate', children: [jsx('span', { className: 'font-medium', children: account.email || account.display }), jsx('span', { className: 'ml-2 text-(--ui-text-tertiary)', children: account.plan })] }),
                     status ? jsx('span', { className: 'shrink-0 text-(--ui-text-tertiary)', children: status }) : null,
-                    jsx('span', {
+                    quotaSpecs.length ? jsx('span', {
                       className: 'col-start-2 col-span-2 flex flex-wrap gap-x-4 text-xs',
                       children: quotaSpecs.map(spec => quotaLine(spec.label, spec.quota, spec.tone, t, spec.key))
-                    }),
+                    }) : null,
                     choosing === account.id ? jsx('span', { className: 'shrink-0', children: '…' }) : null
                   ]
                 })

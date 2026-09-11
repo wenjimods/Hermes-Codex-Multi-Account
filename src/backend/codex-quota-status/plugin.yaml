@@ -1,5 +1,5 @@
 name: codex-quota-status
-version: 1.0.1
+version: 1.0.4
 description: "Codex multi-account default selector with per-account quota display."
 author: hermes-community
 kind: standalone

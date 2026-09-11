@@ -1,6 +1,6 @@
 [project]
 name = "hermes-codex-multi-account"
-version = "1.0.1"
+version = "1.0.4"
 description = "Community multi-account selector and quota status plugin for Hermes Agent"
 readme = "README.md"
 requires-python = ">=3.10"

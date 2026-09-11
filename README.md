@@ -11,7 +11,9 @@ An unofficial plugin for **Hermes Agent** and **Hermes Desktop** that adds defau
 
 ## Verified Baseline & Compatibility
 
-- **Hermes Agent Baseline**: `v0.20.5 (2026.8.19)`, local working tree `4a19dfa7` based on upstream `7eee066c` with 2 carried commits (not a pristine upstream checkout)
+- **Current local baseline**: Hermes Agent `v0.21.1 (2026.9.7)`, local working tree `4a39a3ff` based on upstream `20f7ef4d` with 1 carried commit (not a pristine upstream checkout)
+- **Compatibility bridge**: supports both the v0.20.x and v0.21.x Codex usage URL resolver APIs
+- **Previously verified baseline**: Hermes Agent `v0.20.5 (2026.8.19)`
 - **Locally verified**: Windows 11, Python 3.11.15, Node.js 22
 - **CI targets**: Windows, Ubuntu Linux, and macOS on Python 3.11 / Node.js 22
 
@@ -22,9 +24,11 @@ For technical details on integration and upstream API dependency analysis, refer
 ## V1 Scope & Architectural Boundaries
 
 To preserve stability and compatibility across all platforms:
+- **Hermes-Owned Account Pool**: Account authorization and automatic credential rotation remain Hermes Agent core behavior. This plugin displays that pool and changes its default priority; it does not replace Hermes rotation logic.
 - **Default Account Only**: Selecting an account reorganizes priority in `auth.json` so that **newly initiated conversations** use the chosen default account.
 - **No Per-Session Binding**: This plugin does **not** permanently lock or bind existing sessions to specific account IDs and does **not** rely on ephemeral `session.credential.select` APIs.
 - **Strict Privacy**: Raw access and refresh tokens are never transmitted to the local Desktop UI or logged. The backend locally decodes only the JWT claims needed for display (email label and plan tier), then sends that metadata together with opaque credential IDs and quota/status data to the local Desktop UI.
+- **Display-Only Deduplication**: The dropdown may collapse rows that share the same verified email claim and plan. This does not remove, merge, or rewrite any credential in the Hermes account pool.
 
 ---
 
@@ -37,10 +41,12 @@ This extension interfaces with internal, non-public Hermes Agent modules (`agent
 ## Features
 
 - **Transactional Installation**: Auto-discovers Hermes directories, validates preflight requirements, creates timestamped backups, and automatically rolls back changes if installation or verification fails.
-- **Status Bar & Dropdown Menu**: View plan-aware quota periods directly in Hermes Desktop: 5-hour / weekly for standard paid plans, weekly for Pro, and monthly for Free.
+- **Status Bar & Dropdown Menu**: View plan-aware quota periods directly in Hermes Desktop. The plugin reads OpenAI's declared window duration, so Go and other plans can safely follow either 5-hour / weekly or monthly quota rollouts without a hard-coded label.
 - **One-Click Default Switching**: Switch active priority to another healthy Codex account.
 - **Bilingual Interface**: Native English and Chinese (`zh-CN`) support using Hermes Desktop i18n APIs with responsive fallbacks.
 - **Cooldown & Exhaustion Awareness**: Transparently marks cooling-down or dead accounts as unselectable until quotas reset.
+- **Stale Subscription Detection**: If a plan upgrade invalidates the old OAuth token, the account is marked for re-authorization instead of showing an ambiguous empty quota.
+- **Responsive Account Menu**: Keeps long labels and large account pools inside the Desktop viewport, with scrolling and conservative duplicate-row suppression based on verified email claims plus plan.
 
 ---
 

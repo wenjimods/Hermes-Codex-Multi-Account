@@ -69,6 +69,7 @@ def test_plan_normalization():
     assert plugin.normalize_plan("prolite") == "Pro"
     assert plugin.normalize_plan("business") == "Business"
     assert plugin.normalize_plan("free") == "Free"
+    assert plugin.normalize_plan("go") == "Go"
     assert plugin.normalize_plan("unknown_plan") == "Unknown Plan"
 
 
@@ -121,6 +122,128 @@ def test_paid_and_pro_window_mappings_are_preserved():
     assert pro["monthly"]["remaining"] is None
 
 
+def make_raw_usage_payload(plan, *, primary_seconds, secondary_seconds=None):
+    def window(used, seconds, reset_at):
+        if seconds is None:
+            return None
+        return {
+            "used_percent": used,
+            "limit_window_seconds": seconds,
+            "reset_at": reset_at,
+        }
+
+    return {
+        "plan_type": plan,
+        "rate_limit": {
+            "primary_window": window(25, primary_seconds, 1788200000),
+            "secondary_window": window(40, secondary_seconds, 1788800000),
+        },
+    }
+
+
+def test_go_uses_server_window_durations_not_a_hard_coded_period():
+    plan, quotas = plugin.normalize_usage_payload(
+        "Free",
+        make_raw_usage_payload("go", primary_seconds=5 * 60 * 60, secondary_seconds=7 * 24 * 60 * 60),
+    )
+    assert plan == "Go"
+    assert quotas["session"]["remaining"] == 75
+    assert quotas["weekly"]["remaining"] == 60
+    assert quotas["monthly"]["remaining"] is None
+
+
+def test_go_monthly_rollout_is_rendered_as_monthly_when_server_says_monthly():
+    plan, quotas = plugin.normalize_usage_payload(
+        "Go",
+        make_raw_usage_payload("go", primary_seconds=30 * 24 * 60 * 60),
+    )
+    assert plan == "Go"
+    assert quotas["session"]["remaining"] is None
+    assert quotas["weekly"]["remaining"] is None
+    assert quotas["monthly"]["remaining"] == 75
+
+
+def test_usage_error_reason_extracts_expired_token_without_exposing_body():
+    response = types.SimpleNamespace(
+        status_code=401,
+        json=lambda: {"error": {"code": "token_expired", "message": "secret server body"}},
+    )
+    exc = types.SimpleNamespace(response=response)
+    assert plugin.usage_error_reason(exc) == "token_expired"
+
+
+def test_usage_headers_include_account_id_without_exposing_it_in_rows(monkeypatch):
+    monkeypatch.setattr(
+        plugin,
+        "_claims",
+        lambda _: {
+            plugin.PROFILE_CLAIM: {"email": "user@example.com"},
+            plugin.AUTH_CLAIM: {
+                "chatgpt_plan_type": "plus",
+                "chatgpt_account_id": " account-scope-a ",
+            },
+        },
+    )
+    entry = make_entry(runtime_api_key="dummy-access-token")
+
+    headers = plugin._usage_headers(entry)
+    row = plugin.account_row(entry, None)
+
+    assert headers["Authorization"] == "Bearer dummy-access-token"
+    assert headers["ChatGPT-Account-Id"] == "account-scope-a"
+    assert "account-scope-a" not in json.dumps(row)
+    assert "dummy-access-token" not in json.dumps(row)
+
+
+def test_usage_headers_omit_missing_account_id(monkeypatch):
+    monkeypatch.setattr(plugin, "_claims", lambda _: {plugin.AUTH_CLAIM: {}})
+
+    assert "ChatGPT-Account-Id" not in plugin._usage_headers(make_entry())
+
+
+def test_usage_url_prefers_current_hermes_api(monkeypatch):
+    import agent.account_usage as account_usage
+
+    monkeypatch.setattr(
+        account_usage,
+        "_codex_backend_urls",
+        lambda base_url: (f"{base_url}/usage-current", "reset", "consume"),
+        raising=False,
+    )
+    monkeypatch.setattr(
+        account_usage,
+        "_resolve_codex_usage_url",
+        lambda base_url: f"{base_url}/usage-legacy",
+        raising=False,
+    )
+
+    assert plugin._resolve_usage_url("https://example.test") == "https://example.test/usage-current"
+
+
+def test_usage_url_falls_back_to_released_hermes_api(monkeypatch):
+    import agent.account_usage as account_usage
+
+    monkeypatch.delattr(account_usage, "_codex_backend_urls", raising=False)
+    monkeypatch.setattr(
+        account_usage,
+        "_resolve_codex_usage_url",
+        lambda base_url: f"{base_url}/usage-legacy",
+        raising=False,
+    )
+
+    assert plugin._resolve_usage_url("https://example.test") == "https://example.test/usage-legacy"
+
+
+def test_usage_url_reports_unsupported_hermes_api(monkeypatch):
+    import agent.account_usage as account_usage
+
+    monkeypatch.delattr(account_usage, "_codex_backend_urls", raising=False)
+    monkeypatch.delattr(account_usage, "_resolve_codex_usage_url", raising=False)
+
+    with pytest.raises(ImportError, match="Codex usage URL resolver"):
+        plugin._resolve_usage_url("https://example.test")
+
+
 # 2. Account row does not contain raw tokens
 def test_account_row_contains_no_token(monkeypatch):
     monkeypatch.setattr(
@@ -134,10 +257,20 @@ def test_account_row_contains_no_token(monkeypatch):
     e = make_entry()
     row = plugin.account_row(e, "opaque-a")
     assert row["email"] == "user@example.com"
+    assert row["email_verified"] is True
     assert row["current"] is True
     serialized = json.dumps(row)
     assert e.runtime_api_key not in serialized
     assert e.access_token not in serialized
+
+
+def test_fallback_label_is_not_treated_as_verified_email(monkeypatch):
+    monkeypatch.setattr(plugin, "_claims", lambda _: {})
+
+    row = plugin.account_row(make_entry(label="GPT fallback"), None)
+
+    assert row["email"] == "GPT fallback"
+    assert row["email_verified"] is False
 
 
 # 3. Cooldown accounts are marked non-selectable
@@ -386,6 +519,37 @@ def test_installer_passes_target_home_to_hermes_subprocess(tmp_path, monkeypatch
     assert installer.install(hermes_home, skip_enable=False) == 0
     assert [call[0][2] for call in calls] == ["enable", "doctor"]
     assert all(call[1]["env"]["HERMES_HOME"] == str(hermes_home.resolve()) for call in calls)
+
+
+def test_installer_real_copy_and_verifier_fixture(tmp_path):
+    hermes_home = tmp_path / "isolated-home"
+
+    assert installer.install(hermes_home, skip_enable=True) == 0
+    backend = hermes_home / "plugins" / "codex-quota-status"
+    desktop = hermes_home / "desktop-plugins" / "codex-quota-status"
+    assert (backend / "__init__.py").is_file()
+    assert (backend / "plugin.yaml").is_file()
+    assert (desktop / "plugin.js").is_file()
+    assert not (backend / "__pycache__").exists()
+
+    (hermes_home / "auth.json").write_text(json.dumps({
+        "credential_pool": {
+            "openai-codex": [
+                {"id": "opaque-a", "last_status": "active"},
+                {"id": "opaque-b", "last_status": "active"},
+            ]
+        }
+    }), encoding="utf-8")
+
+    code, report = verifier.verify_installation(
+        hermes_home,
+        min_accounts=2,
+        skip_doctor=True,
+    )
+    assert code == 0
+    assert report["backend_installed"] is True
+    assert report["desktop_installed"] is True
+    assert report["codex_account_count"] == 2
 
 
 # 10. Default home resolution across platforms

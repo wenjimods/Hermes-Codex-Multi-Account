@@ -5,6 +5,33 @@ All notable changes to `hermes-codex-multi-account` will be documented in this f
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.4] - 2026-09-11
+
+Version `1.0.3` was an unpublished local iteration; its changes are consolidated into this release candidate.
+
+### Added
+- Bound the Desktop account menu to the visible viewport and allow vertical scrolling when many accounts are configured.
+- Collapse duplicate display rows only when they share a verified email claim and plan; preserve fallback labels, unknown identities, and different plan variants as separate credentials.
+- Add regression tests for responsive menu bounds, long account labels, duplicate display rows, and release-version consistency.
+
+### Changed
+- Support both known Hermes Codex usage URL resolver APIs: `_resolve_codex_usage_url(...)` in the v0.20.x line and `_codex_backend_urls(...)` in the v0.21.x line.
+- Send the optional `ChatGPT-Account-Id` request header when that claim is present in the local OAuth token, matching current Hermes behavior for account-scoped Codex endpoints.
+
+### Fixed
+- Prevent long account labels from expanding the Desktop composer status strip.
+- Restore quota queries on Hermes v0.21.x after the internal usage URL resolver changed.
+
+## [1.0.2] - 2026-08-31
+
+### Added
+- Recognize OpenAI's `go` plan claim and display it as ChatGPT Go.
+- Classify 5-hour, weekly, and monthly quotas from the upstream `limit_window_seconds` value instead of assuming the period from the plan name.
+
+### Fixed
+- Mark revoked or expired Codex OAuth tokens as requiring re-authorization, rather than presenting a misleading empty quota row.
+- Support both five-hour/weekly and monthly Go quota rollouts according to the window durations returned by OpenAI.
+
 ## [1.0.1] - 2026-08-31
 
 ### Fixed
