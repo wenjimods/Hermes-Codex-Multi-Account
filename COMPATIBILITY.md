@@ -24,7 +24,7 @@ This plugin interfaces directly with internal APIs in the `hermes-agent` core:
 
 1. **`agent.credential_pool`**:
    - Uses `load_pool("openai-codex")` to discover configured OAuth accounts.
-   - Uses `CredentialPool.peek()` for status-only reads when available, with `select()` retained only as an older-Hermes compatibility fallback.
+   - Uses `CredentialPool.peek()` for status-only reads when available. Older-Hermes fallback reads `current()` or the first healthy priority-ordered entry and never invokes `select()`.
    - Reads `get_pool_strategy("openai-codex")` to explain whether priority can guarantee the next account; it does not override the configured routing strategy.
    - Leverages `STATUS_EXHAUSTED`, `STATUS_DEAD`, and `_exhausted_until` to determine whether an account is actively cooling down or permanently invalid.
 2. **`hermes_cli.auth`**:

@@ -348,30 +348,41 @@ def test_build_snapshot_uses_peek_without_selecting(monkeypatch):
     assert payload["priority_guaranteed"] is False
 
 
-def test_build_snapshot_falls_back_to_select_for_older_hermes(monkeypatch):
-    entry = make_entry()
-    calls = []
+def test_legacy_pool_fallback_is_read_only(monkeypatch):
+    cooling = make_entry(id="cooling", priority=0, last_status="exhausted")
+    healthy = make_entry(id="healthy", priority=1)
 
     class LegacyPool:
-        def entries(self):
-            return [entry]
+        def current(self):
+            return None
 
         def select(self):
-            calls.append("select")
-            return entry
+            raise AssertionError("legacy status fallback must not select from the pool")
 
-    monkeypatch.setattr("agent.credential_pool.load_pool", lambda _: LegacyPool())
-    monkeypatch.setattr("agent.credential_pool.get_pool_strategy", lambda _: "fill_first")
-    monkeypatch.setattr(plugin, "account_row", lambda item, current_id: _snapshot_row(str(item.id)))
-    monkeypatch.setattr(plugin, "_cooldown_until", lambda _: None)
-    monkeypatch.setattr(plugin, "_email", lambda _: "user@example.com")
-    monkeypatch.setattr(plugin, "_entry_plan", lambda _: "Plus")
-    monkeypatch.setattr(plugin, "fetch_account_usage", lambda _: _usage_result())
+    monkeypatch.setattr(
+        plugin,
+        "_cooldown_until",
+        lambda entry: time.time() + 60 if entry.id == "cooling" else None,
+    )
 
-    payload = plugin.build_snapshot()
+    selected = plugin._peek_pool(LegacyPool(), [cooling, healthy])
 
-    assert calls == ["select"]
-    assert payload["priority_guaranteed"] is True
+    assert selected.id == "healthy"
+
+
+def test_legacy_pool_fallback_prefers_existing_current(monkeypatch):
+    current = make_entry(id="current", priority=2, last_status="exhausted")
+
+    class LegacyPool:
+        def current(self):
+            return current
+
+        def select(self):
+            raise AssertionError("legacy status fallback must not select from the pool")
+
+    monkeypatch.setattr(plugin, "_cooldown_until", lambda _: time.time() + 60)
+
+    assert plugin._peek_pool(LegacyPool(), [current]).id == "current"
 
 
 # 5. Fast path when select_id is supplied

@@ -8,7 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.0.5] - 2026-09-11
 
 ### Changed
-- Read the displayed account with `pool.peek()` so periodic Desktop status refreshes do not advance request counters or rotate account priority; retain `pool.select()` only as a compatibility fallback for older Hermes releases without `peek()`.
+- Read the displayed account with `pool.peek()` so periodic Desktop status refreshes do not advance request counters or rotate account priority. On older Hermes releases without `peek()`, read `current()` or the first healthy priority-ordered entry without calling `select()`.
 - Report the active Hermes credential-pool strategy and warn after reprioritization when a non-`fill_first` strategy does not guarantee the selected account will be used next.
 - Replace the raw `unknown_account` code with a clear current-Profile reprioritization message in the Desktop UI.
 

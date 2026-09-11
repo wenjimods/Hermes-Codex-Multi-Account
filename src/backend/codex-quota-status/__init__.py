@@ -330,10 +330,24 @@ def _pool_strategy(pool: Any = None) -> str:
     return str(getattr(pool, "_strategy", None) or "fill_first")
 
 
-def _peek_pool(pool: Any) -> Any:
-    """Use Hermes' non-selecting accessor, falling back for older releases."""
+def _peek_pool(pool: Any, entries: list[Any]) -> Any:
+    """Read the displayed credential without invoking Hermes selection."""
     peek = getattr(pool, "peek", None)
-    return peek() if callable(peek) else pool.select()
+    if callable(peek):
+        return peek()
+
+    current = getattr(pool, "current", None)
+    selected = current() if callable(current) else None
+    if selected is not None:
+        return selected
+
+    for entry in sorted(entries, key=lambda item: int(getattr(item, "priority", 0))):
+        if getattr(entry, "last_status", None) == "dead" or _cooldown_until(entry):
+            continue
+        token = getattr(entry, "runtime_api_key", None) or getattr(entry, "access_token", None)
+        if str(token or "").strip():
+            return entry
+    return None
 
 
 def build_snapshot() -> dict[str, Any]:
@@ -341,7 +355,7 @@ def build_snapshot() -> dict[str, Any]:
 
     pool = load_pool(PROVIDER)
     entries = pool.entries()
-    selected = _peek_pool(pool)
+    selected = _peek_pool(pool, entries)
     strategy = _pool_strategy(pool)
     current_id = str(selected.id) if selected is not None else None
     rows = [account_row(entry, current_id) for entry in entries]
